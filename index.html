@@ -50,7 +50,78 @@ body {
 .subtitle {
   font-size: 13px;
   color: var(--ink-soft);
-  margin: 12px 0 30px;
+  margin: 12px 0 16px;
+}
+
+.raise-question-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blueprint);
+  text-decoration: none;
+  border: 1px solid var(--blueprint);
+  border-radius: 999px;
+  padding: 7px 16px;
+  margin-bottom: 24px;
+}
+
+.raise-question-link:hover {
+  background: var(--blueprint-tint);
+}
+
+.raise-question-link:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.search-row {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--paper);
+  padding: 10px 0 16px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+#search-input {
+  flex: 1;
+  padding: 9px 12px;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--paper-raised);
+  color: var(--ink);
+}
+
+#search-input:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 1px;
+}
+
+.search-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.questions-list mark {
+  background: #f4d35e;
+  color: var(--ink);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.questions-list li.no-match {
+  opacity: 0.35;
 }
 
 .questions-list {
@@ -174,9 +245,10 @@ body {
 }
 
 @media print {
-  .download-btn, .back-to-top-row { display: none; }
+  .download-btn, .back-to-top-row, .search-row, .raise-question-link { display: none; }
   body { background: #fff; padding: 0; }
   .questions-list { border-color: #999; }
+  .questions-list li.no-match { opacity: 1; }
 }
 
 @media (max-width: 480px) {
@@ -188,7 +260,13 @@ body {
 <header class="page-header">
   <h1>Member-Submitted Questions</h1>
   <p class="subtitle">Pulled automatically from the society's question-submission form each time this page loads.</p>
+  <a class="raise-question-link" href="https://tally.so/r/b5QlqZ" rel="noopener" target="_blank">＋ Have another question? Raise it here</a>
 </header>
+
+<div class="search-row">
+  <input aria-label="Search questions" id="search-input" placeholder="Search questions…" type="text"/>
+  <span class="search-count" id="search-count"></span>
+</div>
 
 <main>
   <ol class="questions-list" id="questions-list">
@@ -266,12 +344,15 @@ body {
         questions.forEach((question) => {
           const li = document.createElement('li');
           li.textContent = question.trim();
+          li.dataset.original = question.trim();
           listEl.appendChild(li);
         });
 
         if (updatedEl) {
           updatedEl.textContent = `Last fetched ${new Date().toLocaleString()}`;
         }
+
+        setupSearch();
       } catch (err) {
         showError('Received a response from the sheet but could not read it. The sheet structure may have changed.');
         console.error('Live questions parse failed:', err);
@@ -291,6 +372,54 @@ body {
     };
 
     document.body.appendChild(script);
+
+    const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    function setupSearch() {
+      const searchInput = document.getElementById('search-input');
+      const searchCount = document.getElementById('search-count');
+      if (!searchInput) return;
+
+      const items = Array.from(listEl.querySelectorAll('li[data-original]'));
+
+      searchInput.addEventListener('input', () => {
+        const query = searchInput.value.trim();
+        let matchCount = 0;
+        let firstMatchEl = null;
+
+        items.forEach((li) => {
+          const original = li.dataset.original;
+
+          if (!query) {
+            li.innerHTML = original;
+            li.classList.remove('no-match');
+            return;
+          }
+
+          const regex = new RegExp(escapeRegExp(query), 'gi');
+          if (regex.test(original)) {
+            li.innerHTML = original.replace(regex, (m) => `<mark>${m}</mark>`);
+            li.classList.remove('no-match');
+            matchCount += 1;
+            if (!firstMatchEl) firstMatchEl = li;
+          } else {
+            li.innerHTML = original;
+            li.classList.add('no-match');
+          }
+        });
+
+        if (searchCount) {
+          searchCount.textContent = query ? `${matchCount} match${matchCount === 1 ? '' : 'es'}` : '';
+        }
+
+        if (firstMatchEl) {
+          firstMatchEl.scrollIntoView({
+            behavior: reduceMotion ? 'auto' : 'smooth',
+            block: 'center',
+          });
+        }
+      });
+    }
 
     const downloadBtn = document.getElementById('download-pdf-btn');
     if (downloadBtn) {
